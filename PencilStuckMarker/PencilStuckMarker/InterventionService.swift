@@ -15,7 +15,7 @@ actor InterventionService {
 
     private let endpoint = URL(string: "http://localhost:8000/analyze")!
 
-    func analyze(regionId: String, state: RegionState, framePngBase64: String) async {
+    func analyze(regionId: String, state: RegionState, framePngBase64: String) async -> AnalyzeResponse? {
         let anchor = CGPoint(x: state.rect.midX, y: state.rect.midY)
         let payload = AnalyzeRequest(
             regionId: regionId,
@@ -27,7 +27,7 @@ actor InterventionService {
             framePngBase64: framePngBase64
         )
 
-        guard let body = try? JSONEncoder().encode(payload) else { return }
+        guard let body = try? JSONEncoder().encode(payload) else { return nil }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -37,10 +37,11 @@ actor InterventionService {
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             let response = try JSONDecoder().decode(AnalyzeResponse.self, from: data)
-            // TODO: deliver response back to UI (via callback or actor-bridged publisher)
             print("[Intervention] intervene=\(response.intervene) style=\(response.style) msg=\(response.message)")
+            return response
         } catch {
             print("[Intervention] /analyze failed: \(error)")
+            return nil
         }
     }
 }

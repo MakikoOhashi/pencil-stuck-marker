@@ -226,8 +226,8 @@ open PencilStuckMarker/PencilStuckMarker.xcodeproj
 ### Python Service *(planned)*
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+pip install -r python_service/requirements.txt
+uvicorn python_service.main:app --reload --port 8000
 ```
 
 ### Vision Agent call site *(planned)*

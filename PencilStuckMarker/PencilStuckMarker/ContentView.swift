@@ -30,14 +30,15 @@ struct ContentView: View {
                 id: \.regionId
             ) { state in
                 let stuck = regionManager.detectStuckCandidate(state)
+                let interventionActive = state.interventionMessage != nil
 
                 ZStack(alignment: .topTrailing) {
                     Rectangle()
                         .strokeBorder(
-                            stuck ? Color.yellow : Color.gray.opacity(0.5),
+                            (stuck || interventionActive) ? Color.yellow : Color.gray.opacity(0.5),
                             lineWidth: 2
                         )
-                        .background(stuck ? Color.yellow.opacity(0.15) : Color.clear)
+                        .background((stuck || interventionActive) ? Color.yellow.opacity(0.15) : Color.clear)
 
                     Text(state.lastStrokeAt == nil ? "--" : "\(state.elapsedSeconds)s")
                         .font(.caption)
@@ -46,6 +47,17 @@ struct ContentView: View {
                 }
                 .frame(width: state.rect.width, height: state.rect.height)
                 .position(x: state.rect.midX, y: state.rect.midY)
+
+                if let message = state.interventionMessage {
+                    Text("💭 \(message)")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.yellow.opacity(0.8), lineWidth: 1))
+                        .position(x: state.rect.midX, y: max(24, state.rect.minY - 14))
+                }
             }
         }
         .onReceive(timer) { now in

@@ -26,6 +26,9 @@ final class RegionStateManager: ObservableObject {
         state.lastStrokeAt = Date()
         state.elapsedSeconds = 0
         state.isInterventionPending = false   // reset on new activity
+        state.interventionMessage = nil
+        state.interventionStyle = nil
+        state.bubbleExpiresAt = nil
         states[regionId] = state
     }
 
@@ -36,7 +39,12 @@ final class RegionStateManager: ObservableObject {
             if let last = states[regionId]?.lastStrokeAt {
                 states[regionId]?.elapsedSeconds = Int(now.timeIntervalSince(last))
             }
-            checkAndTrigger(regionId: regionId)
+            if let expiresAt = states[regionId]?.bubbleExpiresAt, now >= expiresAt {
+                states[regionId]?.interventionMessage = nil
+                states[regionId]?.interventionStyle = nil
+                states[regionId]?.bubbleExpiresAt = nil
+            }
+            checkAndTrigger(regionId: regionId, now: now)
         }
     }
 
@@ -49,10 +57,11 @@ final class RegionStateManager: ObservableObject {
 
     // MARK: - Single trigger call site
 
-    private func checkAndTrigger(regionId: String) {
+    private func checkAndTrigger(regionId: String, now: Date) {
         guard let state = states[regionId],
               detectStuckCandidate(state),
               !state.isInterventionPending else { return }
+        if let cooldownUntil = state.cooldownUntil, now < cooldownUntil { return }
         states[regionId]?.isInterventionPending = true
         triggerInterventionCandidate(regionId: regionId, state: state)
     }
@@ -61,11 +70,20 @@ final class RegionStateManager: ObservableObject {
         // Capture frame on MainActor before hopping to InterventionService actor
         let framePngBase64 = FrameCapture.captureBase64() ?? ""
         Task {
-            await InterventionService.shared.analyze(
+            let response = await InterventionService.shared.analyze(
                 regionId: regionId,
                 state: state,
                 framePngBase64: framePngBase64
             )
+            await MainActor.run {
+                self.states[regionId]?.isInterventionPending = false
+                guard let response, response.intervene,
+                      response.target.regionId == regionId else { return }
+                self.states[regionId]?.interventionStyle = response.style
+                self.states[regionId]?.interventionMessage = response.message
+                self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(8)
+                self.states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(response.cooldownSeconds))
+            }
         }
     }
 }
