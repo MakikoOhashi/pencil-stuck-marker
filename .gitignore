@@ -8,3 +8,29 @@ build/
 
 # macOS
 .DS_Store
+
+.env
+*.env
+.venv/
+.pycache/
+__pycache__/
+*.pyc
+.env
+
+.venv/
+.pycache/
+__pycache__/
+*.pyc
+.env
+
+.venv/
+.pycache/
+__pycache__/
+*.pyc
+.env
+
+.venv/
+.pycache/
+__pycache__/
+*.pyc
+.env

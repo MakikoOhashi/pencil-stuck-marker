@@ -223,19 +223,20 @@ open PencilStuckMarker/PencilStuckMarker.xcodeproj
 # Xcode 15+, iOS 17+
 ```
 
-### Python Service *(planned)*
+### Python Service
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r python_service/requirements.txt
+
+# Optional but recommended for Vision Agents SDK decision path
+export OPENAI_API_KEY=your_key_here
+# export OPENAI_MODEL=gpt-4.1-mini
+# export OPENAI_BASE_URL=https://api.openai.com/v1
+
 uvicorn python_service.main:app --reload --port 8000
 ```
 
-### Vision Agent call site *(planned)*
-```python
-# Called once per stuck candidate — NOT per frame
-result = agent.run(snapshot=frame, region=rect, features=local_features)
-# returns: {"intervene": "yes"|"no"|"uncertain", "confidence": 0.0–1.0}
-```
+If `OPENAI_API_KEY` is unset, `/analyze` falls back to local heuristic verification.
 
 ---
 
