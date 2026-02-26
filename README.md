@@ -1,16 +1,12 @@
-# Pencil Stuck Marker (WIP)
+# Pencil Stuck Marker
 
-Experimental iPad app for detecting writing stalls with Apple Pencil
-and visually marking "stuck" regions in real time.
+Experimental iPad app that detects Apple Pencil writing stalls and nudges learners with spatial annotations — without solving problems or parsing PDFs.
 
-Status: Early prototype (PencilKit input validation)
+- Detects "stall / hesitation" from pen interaction patterns
+- Shows a gentle optional nudge near where the learner paused
+- Does **not** use OCR; learner stays in control at all times
 
----
-
-# Project: (TBD) — PDF Study Companion (Prototype)
-
-> A PDF + Apple Pencil study companion that **detects when a learner is stuck** and gently **nudges attention** with spatial annotations.  
-> It does **not** solve the problem or "understand" the content via OCR.
+**Status:** Early prototype (PencilKit input validation) — WIP
 
 ## Why this exists
 On iPad, many learners study by writing directly on PDFs.  
@@ -115,15 +111,37 @@ Why this placement:
 ---
 
 ## Data Flow (Decision Pipeline)
-1. Swift collects pen events + region states continuously
-2. Swift computes lightweight features + detects **stuck candidate**
-3. Swift requests Vision Agent verification (1 snapshot)
-4. If verified:
-   - Swift calls Python to generate an intervention command (or Python is called earlier; either is fine)
-5. Swift renders the intervention near the anchor point
-6. User taps bubble:
-   - update level / dismiss
-   - (optional) send a short "user intent" event back to Python
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  iPad (Swift)                                           │
+│  ・pen events + region states (continuous)              │
+│  ・lightweight heuristics                               │
+│        stall N sec? / oscillation?                      │
+└───────────────────┬─────────────────────────────────────┘
+                    │ stuck candidate detected
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│  Vision Agent SDK                                       │
+│  ・1-frame snapshot (PDF + handwriting)                 │
+│  ・returns: intervene yes / no / uncertain              │
+└───────────────────┬─────────────────────────────────────┘
+                    │ intervene: yes
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│  Python Service ("Teacher Brain")                       │
+│  ・score features + cooldown logic                      │
+│  ・select behavior-based template                       │
+│  ・returns: UI command (anchor, shape, bubble text)     │
+└───────────────────┬─────────────────────────────────────┘
+                    │ UI command
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│  iPad (Swift) — render intervention                     │
+│  ・highlight / arrow + 💭 bubble near anchor point      │
+│  ・user taps → level up / dismiss / send intent event   │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -139,11 +157,39 @@ Why this placement:
 ---
 
 ## Out of scope (for hackathon week)
+
+> **Why not OCR?** Knowing *what* is written doesn't tell us *how hard the learner is struggling* — pen hesitation does. OCR adds latency and complexity with no gain for our core signal.
+
 - OCR / PDF text parsing
 - Auto-detecting answer boxes from the PDF
 - Full chat tutor
 - Domain-specific reasoning (dice / geometry semantics)
 - Multi-page learning analytics
+
+---
+
+## How to Run
+
+### iOS App
+```bash
+open PencilStuckMarker/PencilStuckMarker.xcodeproj
+# Target: iPad (recommended) or iPad Simulator
+# Xcode 15+, iOS 17+
+```
+
+### Python Service *(planned)*
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+### Vision Agent call site *(planned)*
+```python
+# Called once per stuck candidate — NOT per frame
+result = agent.run(snapshot=frame, region=rect, features=local_features)
+# returns: {"intervene": "yes"|"no"|"uncertain", "confidence": 0.0–1.0}
+```
 
 ---
 
