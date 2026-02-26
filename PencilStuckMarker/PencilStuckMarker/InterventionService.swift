@@ -15,7 +15,7 @@ actor InterventionService {
 
     private let endpoint = URL(string: "http://localhost:8000/analyze")!
 
-    func analyze(regionId: String, state: RegionState) async {
+    func analyze(regionId: String, state: RegionState, framePngBase64: String) async {
         let anchor = CGPoint(x: state.rect.midX, y: state.rect.midY)
         let payload = AnalyzeRequest(
             regionId: regionId,
@@ -24,7 +24,7 @@ actor InterventionService {
             anchor: .init(x: anchor.x, y: anchor.y),
             regionRect: .init(x: state.rect.minX, y: state.rect.minY,
                               w: state.rect.width, h: state.rect.height),
-            framePngBase64: ""  // TODO: capture PKCanvasView snapshot before calling
+            framePngBase64: framePngBase64
         )
 
         guard let body = try? JSONEncoder().encode(payload) else { return }

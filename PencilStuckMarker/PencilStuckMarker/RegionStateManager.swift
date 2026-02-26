@@ -58,8 +58,14 @@ final class RegionStateManager: ObservableObject {
     }
 
     private func triggerInterventionCandidate(regionId: String, state: RegionState) {
+        // Capture frame on MainActor before hopping to InterventionService actor
+        let framePngBase64 = FrameCapture.captureBase64() ?? ""
         Task {
-            await InterventionService.shared.analyze(regionId: regionId, state: state)
+            await InterventionService.shared.analyze(
+                regionId: regionId,
+                state: state,
+                framePngBase64: framePngBase64
+            )
         }
     }
 }
