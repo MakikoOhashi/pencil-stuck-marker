@@ -145,6 +145,52 @@ Why this placement:
 
 ---
 
+## API Contract (Swift ↔ Python)
+
+### `POST /analyze` — Swift → Python
+
+```json
+{
+  "region_id": "A",
+  "stall_seconds": 12.4,
+  "oscillation_count": 3,
+  "anchor": { "x": 812, "y": 534 },
+  "region_rect": { "x": 120, "y": 400, "w": 680, "h": 260 },
+  "frame_png_base64": "..."
+}
+```
+
+| field | type | description |
+|---|---|---|
+| `region_id` | string | どの答え欄か |
+| `stall_seconds` | float | 最後のストロークからの経過秒 |
+| `oscillation_count` | int | 書き→消しの繰り返し回数 |
+| `anchor` | {x,y} | バブルを表示するスクリーン座標 |
+| `region_rect` | {x,y,w,h} | 答え欄の矩形（Vision Agent に渡す） |
+| `frame_png_base64` | string | 1-frame スナップショット（Vision Agent 用） |
+
+### Response — Python → Swift
+
+```json
+{
+  "intervene": true,
+  "style": "highlight",
+  "message": "ここで少し止まってるみたい",
+  "target": { "region_id": "A" },
+  "cooldown_seconds": 45
+}
+```
+
+| field | type | description |
+|---|---|---|
+| `intervene` | bool | 介入するか否か |
+| `style` | string | `highlight` のみ（Day 1）、将来 `arrow` / `pulse` を追加予定 |
+| `message` | string | バブルに表示するテキスト |
+| `target.region_id` | string | 描画先の答え欄 |
+| `cooldown_seconds` | int | 次の介入までの待機秒 |
+
+---
+
 ## Safety / UX Constraints
 - No forced popups: only a small bubble; user opts in
 - Cooldown to avoid nagging
