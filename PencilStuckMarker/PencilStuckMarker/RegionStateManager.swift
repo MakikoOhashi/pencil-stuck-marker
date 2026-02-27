@@ -12,10 +12,10 @@ final class RegionStateManager: ObservableObject {
 
     @Published private(set) var states: [String: RegionState]
     private let messageTemplates = [
-        "ここで少し止まってるみたい",
-        "書いて→消してを繰り返してるかも",
-        "このあたり、もう一度見てみる？",
-        "声で考えてみる？",
+        "Looks like you paused here a bit.",
+        "You might be rewriting and erasing repeatedly.",
+        "Want to take another look at this area?",
+        "Want to think it through out loud?",
     ]
 
     init(regions: [(id: String, rect: CGRect)]) {

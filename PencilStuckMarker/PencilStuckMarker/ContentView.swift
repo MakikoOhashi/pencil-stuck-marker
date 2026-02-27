@@ -67,7 +67,7 @@ struct ContentView: View {
                                     Text("💭 \(message)")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(.primary)
-                                    Text("相談する？")
+                                    Text("Need a hint?")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -76,7 +76,7 @@ struct ContentView: View {
 
                             if state.isBubbleExpanded {
                                 HStack(spacing: 8) {
-                                    Button("もう少しヒント") {
+                                    Button("More hint") {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             regionManager.requestMoreHint(regionId: state.regionId)
                                         }
@@ -87,7 +87,7 @@ struct ContentView: View {
                                     .background(Color.orange.opacity(0.2))
                                     .clipShape(Capsule())
 
-                                    Button("今は大丈夫") {
+                                    Button("I'm okay for now") {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             regionManager.dismissIntervention(regionId: state.regionId)
                                         }
@@ -102,7 +102,7 @@ struct ContentView: View {
                                 Button {
                                     showVoicePlannedAlert = true
                                 } label: {
-                                    Label("音声で話す（予定）", systemImage: "mic.fill")
+                                    Label("Voice mode (planned)", systemImage: "mic.fill")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -123,7 +123,7 @@ struct ContentView: View {
         .onReceive(timer) { now in
             regionManager.onTimerTick(now: now)
         }
-        .alert("音声機能は今後追加予定", isPresented: $showVoicePlannedAlert) {
+        .alert("Voice mode is planned for a future update.", isPresented: $showVoicePlannedAlert) {
             Button("OK", role: .cancel) {}
         }
     }

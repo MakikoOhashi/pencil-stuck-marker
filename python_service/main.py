@@ -164,10 +164,10 @@ async def _verify_intervention(req: AnalyzeRequest) -> bool:
 async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     intervene = await _verify_intervention(req)
     if intervene:
-        message = "ここで少し止まってるみたい"
+        message = "Looks like you paused here a bit."
         cooldown = 45
     else:
-        message = "今は様子見でよさそう"
+        message = "Looks fine for now."
         cooldown = 15
 
     return AnalyzeResponse(
