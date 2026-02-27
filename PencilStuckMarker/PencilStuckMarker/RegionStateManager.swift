@@ -26,11 +26,11 @@ final class RegionStateManager: ObservableObject {
 
     // MARK: - Single entry point for stroke events
 
-    func updateRegionState(regionId: String, strokeBounds: CGRect) {
+    func updateRegionState(regionId: String, strokeBounds: CGRect, strokeEndPoint: CGPoint) {
         guard var state = states[regionId],
               state.rect.intersects(strokeBounds) else { return }
         state.lastStrokeAt = Date()
-        state.lastStrokePoint = CGPoint(x: strokeBounds.midX, y: strokeBounds.midY)
+        state.lastStrokePoint = strokeEndPoint
         state.elapsedSeconds = 0
         state.isInterventionPending = false   // reset on new activity
         state.interventionMessage = nil

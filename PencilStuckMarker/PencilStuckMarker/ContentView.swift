@@ -19,14 +19,18 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
-                CanvasView(drawing: $drawing) { strokeBounds in
+                CanvasView(drawing: $drawing) { strokeBounds, strokeEndPoint in
                     for regionId in regionManager.states.keys {
-                        regionManager.updateRegionState(regionId: regionId, strokeBounds: strokeBounds)
+                        regionManager.updateRegionState(
+                            regionId: regionId,
+                            strokeBounds: strokeBounds,
+                            strokeEndPoint: strokeEndPoint
+                        )
                     }
                 }
                 .ignoresSafeArea()
 
-                ForEach(regionManager.states.values, id: \.regionId) { state in
+                ForEach(Array(regionManager.states.values), id: \.regionId) { state in
                     let stuck = regionManager.detectStuckCandidate(state)
                     let interventionActive = state.interventionMessage != nil
                     let level2Active = state.interventionLevel >= 2 || state.interventionStyle == "level2"

@@ -8,7 +8,7 @@ import PencilKit
 
 struct CanvasView: UIViewRepresentable {
     @Binding var drawing: PKDrawing
-    var onStrokeAdded: (CGRect) -> Void
+    var onStrokeAdded: (CGRect, CGPoint) -> Void
 
     func makeUIView(context: Context) -> PKCanvasView {
         let canvas = PKCanvasView()
@@ -30,17 +30,24 @@ struct CanvasView: UIViewRepresentable {
     }
 
     class Coordinator: NSObject, PKCanvasViewDelegate {
-        var onStrokeAdded: (CGRect) -> Void
+        var onStrokeAdded: (CGRect, CGPoint) -> Void
         var previousCount = 0
 
-        init(onStrokeAdded: @escaping (CGRect) -> Void) {
+        init(onStrokeAdded: @escaping (CGRect, CGPoint) -> Void) {
             self.onStrokeAdded = onStrokeAdded
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             let strokes = canvasView.drawing.strokes
             if strokes.count > previousCount, let last = strokes.last {
-                onStrokeAdded(last.renderBounds)
+                let fallback = CGPoint(x: last.renderBounds.midX, y: last.renderBounds.midY)
+                let endPoint: CGPoint
+                if last.path.count > 0 {
+                    endPoint = last.path[last.path.count - 1].location
+                } else {
+                    endPoint = fallback
+                }
+                onStrokeAdded(last.renderBounds, endPoint)
             }
             previousCount = strokes.count
         }
