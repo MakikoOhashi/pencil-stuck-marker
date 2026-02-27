@@ -9,59 +9,118 @@ import Combine
 
 struct ContentView: View {
     @State private var drawing = PKDrawing()
+    @State private var showVoicePlannedAlert = false
     @StateObject private var regionManager = RegionStateManager(regions: [
-        (id: "A", rect: CGRect(x: 40, y: 120, width: 440, height: 260)),
-        (id: "B", rect: CGRect(x: 40, y: 440, width: 440, height: 260)),
+        (id: "ALL", rect: CGRect(x: -10_000, y: -10_000, width: 20_000, height: 20_000)),
     ])
 
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            CanvasView(drawing: $drawing) { strokeBounds in
-                for regionId in regionManager.states.keys {
-                    regionManager.updateRegionState(regionId: regionId, strokeBounds: strokeBounds)
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                CanvasView(drawing: $drawing) { strokeBounds in
+                    for regionId in regionManager.states.keys {
+                        regionManager.updateRegionState(regionId: regionId, strokeBounds: strokeBounds)
+                    }
                 }
-            }
-            .ignoresSafeArea()
+                .ignoresSafeArea()
 
-            ForEach(
-                regionManager.states.values.sorted(by: { $0.regionId < $1.regionId }),
-                id: \.regionId
-            ) { state in
-                let stuck = regionManager.detectStuckCandidate(state)
-                let interventionActive = state.interventionMessage != nil
+                ForEach(regionManager.states.values, id: \.regionId) { state in
+                    let stuck = regionManager.detectStuckCandidate(state)
+                    let interventionActive = state.interventionMessage != nil
+                    let level2Active = state.interventionLevel >= 2 || state.interventionStyle == "level2"
+                    let anchor = state.interventionAnchor ?? state.lastStrokePoint ?? CGPoint(x: proxy.size.width * 0.5, y: proxy.size.height * 0.35)
+                    let bubbleX = min(max(anchor.x, 110), proxy.size.width - 110)
+                    let bubbleY = min(max(anchor.y - (state.isBubbleExpanded ? 94 : 70), 54), proxy.size.height - 40)
 
-                ZStack(alignment: .topTrailing) {
-                    Rectangle()
-                        .strokeBorder(
-                            (stuck || interventionActive) ? Color.yellow : Color.gray.opacity(0.5),
-                            lineWidth: 2
-                        )
-                        .background((stuck || interventionActive) ? Color.yellow.opacity(0.15) : Color.clear)
+                    if stuck || interventionActive {
+                        Circle()
+                            .fill(level2Active ? Color.orange.opacity(0.24) : Color.yellow.opacity(0.2))
+                            .frame(width: level2Active ? 230 : 170, height: level2Active ? 230 : 170)
+                            .blur(radius: level2Active ? 12 : 16)
+                            .position(anchor)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
 
-                    Text(state.lastStrokeAt == nil ? "--" : "\(state.elapsedSeconds)s")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(6)
-                }
-                .frame(width: state.rect.width, height: state.rect.height)
-                .position(x: state.rect.midX, y: state.rect.midY)
+                    if level2Active {
+                        Image(systemName: "arrowtriangle.down.fill")
+                            .foregroundStyle(Color.orange)
+                            .font(.title3)
+                            .position(x: anchor.x, y: max(16, anchor.y - 78))
+                            .transition(.opacity.combined(with: .scale))
+                    }
 
-                if let message = state.interventionMessage {
-                    Text("💭 \(message)")
-                        .font(.caption)
+                    if let message = state.interventionMessage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                withAnimation(.spring(duration: 0.25)) {
+                                    regionManager.toggleBubble(regionId: state.regionId)
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("💭 \(message)")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text("相談する？")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            if state.isBubbleExpanded {
+                                HStack(spacing: 8) {
+                                    Button("もう少しヒント") {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            regionManager.requestMoreHint(regionId: state.regionId)
+                                        }
+                                    }
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(Color.orange.opacity(0.2))
+                                    .clipShape(Capsule())
+
+                                    Button("今は大丈夫") {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            regionManager.dismissIntervention(regionId: state.regionId)
+                                        }
+                                    }
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(Color.gray.opacity(0.18))
+                                    .clipShape(Capsule())
+                                }
+
+                                Button {
+                                    showVoicePlannedAlert = true
+                                } label: {
+                                    Label("音声で話す（予定）", systemImage: "mic.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
                         .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color.yellow.opacity(0.8), lineWidth: 1))
-                        .position(x: state.rect.midX, y: max(24, state.rect.minY - 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(level2Active ? Color.orange.opacity(0.85) : Color.yellow.opacity(0.8), lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .position(x: bubbleX, y: bubbleY)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    }
                 }
             }
         }
         .onReceive(timer) { now in
             regionManager.onTimerTick(now: now)
+        }
+        .alert("音声機能は今後追加予定", isPresented: $showVoicePlannedAlert) {
+            Button("OK", role: .cancel) {}
         }
     }
 }

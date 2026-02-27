@@ -16,7 +16,7 @@ actor InterventionService {
     private let endpoint = URL(string: "http://localhost:8000/analyze")!
 
     func analyze(regionId: String, state: RegionState, framePngBase64: String) async -> AnalyzeResponse? {
-        let anchor = CGPoint(x: state.rect.midX, y: state.rect.midY)
+        let anchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
         let payload = AnalyzeRequest(
             regionId: regionId,
             stallSeconds: Double(state.elapsedSeconds),

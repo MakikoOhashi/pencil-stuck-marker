@@ -11,6 +11,12 @@ import Combine
 final class RegionStateManager: ObservableObject {
 
     @Published private(set) var states: [String: RegionState]
+    private let messageTemplates = [
+        "ここで少し止まってるみたい",
+        "書いて→消してを繰り返してるかも",
+        "このあたり、もう一度見てみる？",
+        "声で考えてみる？",
+    ]
 
     init(regions: [(id: String, rect: CGRect)]) {
         states = Dictionary(
@@ -24,11 +30,15 @@ final class RegionStateManager: ObservableObject {
         guard var state = states[regionId],
               state.rect.intersects(strokeBounds) else { return }
         state.lastStrokeAt = Date()
+        state.lastStrokePoint = CGPoint(x: strokeBounds.midX, y: strokeBounds.midY)
         state.elapsedSeconds = 0
         state.isInterventionPending = false   // reset on new activity
         state.interventionMessage = nil
         state.interventionStyle = nil
+        state.interventionAnchor = nil
         state.bubbleExpiresAt = nil
+        state.isBubbleExpanded = false
+        state.interventionLevel = 0
         states[regionId] = state
     }
 
@@ -42,7 +52,10 @@ final class RegionStateManager: ObservableObject {
             if let expiresAt = states[regionId]?.bubbleExpiresAt, now >= expiresAt {
                 states[regionId]?.interventionMessage = nil
                 states[regionId]?.interventionStyle = nil
+                states[regionId]?.interventionAnchor = nil
                 states[regionId]?.bubbleExpiresAt = nil
+                states[regionId]?.isBubbleExpanded = false
+                states[regionId]?.interventionLevel = 0
             }
             checkAndTrigger(regionId: regionId, now: now)
         }
@@ -80,10 +93,39 @@ final class RegionStateManager: ObservableObject {
                 guard let response, response.intervene,
                       response.target.regionId == regionId else { return }
                 self.states[regionId]?.interventionStyle = response.style
-                self.states[regionId]?.interventionMessage = response.message
-                self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(8)
+                self.states[regionId]?.interventionMessage = self.messageTemplates.randomElement() ?? response.message
+                self.states[regionId]?.interventionAnchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
+                self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
+                self.states[regionId]?.isBubbleExpanded = false
+                self.states[regionId]?.interventionLevel = 1
                 self.states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(response.cooldownSeconds))
             }
         }
+    }
+
+    // MARK: - Bubble interactions
+
+    func toggleBubble(regionId: String) {
+        guard states[regionId]?.interventionMessage != nil else { return }
+        states[regionId]?.isBubbleExpanded.toggle()
+        states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
+    }
+
+    func requestMoreHint(regionId: String) {
+        guard states[regionId]?.interventionMessage != nil else { return }
+        states[regionId]?.interventionStyle = "level2"
+        states[regionId]?.interventionLevel = 2
+        states[regionId]?.isBubbleExpanded = false
+        states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(10)
+    }
+
+    func dismissIntervention(regionId: String) {
+        states[regionId]?.interventionMessage = nil
+        states[regionId]?.interventionStyle = nil
+        states[regionId]?.interventionAnchor = nil
+        states[regionId]?.bubbleExpiresAt = nil
+        states[regionId]?.isBubbleExpanded = false
+        states[regionId]?.interventionLevel = 0
+        states[regionId]?.cooldownUntil = Date().addingTimeInterval(30)
     }
 }

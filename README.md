@@ -199,6 +199,7 @@ Why this placement:
   - "書いて→消してを繰り返してるかも"
   - "声で考えてみる？"
 - No claims of correctness; no answer-giving
+- Voice reflection mode is planned but not implemented in this prototype.
 
 ---
 

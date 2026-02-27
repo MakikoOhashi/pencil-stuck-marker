@@ -63,7 +63,7 @@ def _extract_text(obj: object) -> str:
     return str(obj)
 
 
-def _verify_with_vision_agents(req: AnalyzeRequest) -> Optional[bool]:
+async def _verify_with_vision_agents(req: AnalyzeRequest) -> Optional[bool]:
     """
     Returns:
       True/False when Vision Agents SDK check succeeded,
@@ -80,7 +80,7 @@ def _verify_with_vision_agents(req: AnalyzeRequest) -> Optional[bool]:
     except Exception:
         return None
 
-    llm_cls = getattr(va_openai, "ChatCompletionsVLM", None)
+    llm_cls = getattr(va_openai, "ChatCompletionsLLM", None)
     if llm_cls is None:
         return None
 
@@ -111,22 +111,20 @@ def _verify_with_vision_agents(req: AnalyzeRequest) -> Optional[bool]:
         }
     ]
 
-    simple_response = getattr(llm, "simple_response", None)
-    if not callable(simple_response):
+    create_response = getattr(llm, "create_response", None)
+    if not callable(create_response):
         return None
 
-    # Try call shapes defensively to match SDK wrapper evolution.
+    # Use explicit messages so we don't depend on agent conversation initialization.
     attempts = [
-        lambda: simple_response(messages=messages),
-        lambda: simple_response(text=prompt, messages=messages),
-        lambda: simple_response(prompt),
+        lambda: create_response(messages=messages, stream=False),
+        lambda: create_response(messages=messages),
     ]
     for attempt in attempts:
         try:
             result = attempt()
             if inspect.isawaitable(result):
-                # Keep endpoint sync for Day1; async SDK call can be added in Day2.
-                return None
+                result = await result
             text = _extract_text(result)
             if not text:
                 continue
@@ -137,7 +135,7 @@ def _verify_with_vision_agents(req: AnalyzeRequest) -> Optional[bool]:
     return None
 
 
-def _verify_intervention(req: AnalyzeRequest) -> bool:
+async def _verify_intervention(req: AnalyzeRequest) -> bool:
     # Day1 baseline rule: only consider intervention after meaningful stall/oscillation.
     heuristic_flag = req.stall_seconds >= 10 or req.oscillation_count >= 3
     if not heuristic_flag:
@@ -153,7 +151,7 @@ def _verify_intervention(req: AnalyzeRequest) -> bool:
 
     # Vision Agents SDK path:
     # If configured, use VA decision as final verifier.
-    va_decision = _verify_with_vision_agents(req)
+    va_decision = await _verify_with_vision_agents(req)
     if va_decision is not None:
         print(f"[analyze] verifier=vision_agents decision={va_decision} region={req.region_id}")
         return va_decision
@@ -163,8 +161,8 @@ def _verify_intervention(req: AnalyzeRequest) -> bool:
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
-    intervene = _verify_intervention(req)
+async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
+    intervene = await _verify_intervention(req)
     if intervene:
         message = "ここで少し止まってるみたい"
         cooldown = 45
