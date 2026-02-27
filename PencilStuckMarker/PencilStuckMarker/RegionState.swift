@@ -6,6 +6,17 @@
 import CoreGraphics
 import Foundation
 
+enum CoachSpeaker: Equatable {
+    case user
+    case coach
+}
+
+struct CoachMessage: Identifiable {
+    let id = UUID()
+    let speaker: CoachSpeaker
+    let text: String
+}
+
 struct RegionState {
     let regionId: String
     let rect: CGRect
@@ -22,4 +33,10 @@ struct RegionState {
     var cooldownUntil: Date? = nil
     var isBubbleExpanded: Bool = false
     var interventionLevel: Int = 0
+    var isCoachPanelVisible: Bool = false
+    var coachOffset: CGSize = .zero
+    var coachInput: String = ""
+    var coachLine: String? = nil
+    var coachMessages: [CoachMessage] = []
+    var isCoachLoading: Bool = false
 }

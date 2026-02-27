@@ -14,6 +14,7 @@ actor InterventionService {
     static let shared = InterventionService()
 
     private let endpoint = URL(string: "http://localhost:8000/analyze")!
+    private let coachEndpoint = URL(string: "http://localhost:8000/coach")!
 
     func analyze(regionId: String, state: RegionState, framePngBase64: String) async -> AnalyzeResponse? {
         let anchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
@@ -44,6 +45,33 @@ actor InterventionService {
             return nil
         }
     }
+
+    func coach(regionId: String, state: RegionState, userText: String) async -> CoachResponse? {
+        let anchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
+        let payload = CoachRequest(
+            regionId: regionId,
+            stallSeconds: Double(state.elapsedSeconds),
+            oscillationCount: state.oscillationCount,
+            anchor: .init(x: anchor.x, y: anchor.y),
+            userText: userText,
+            previousCoachLine: state.coachLine
+        )
+
+        guard let body = try? JSONEncoder().encode(payload) else { return nil }
+
+        var request = URLRequest(url: coachEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            return try JSONDecoder().decode(CoachResponse.self, from: data)
+        } catch {
+            print("[Coach] /coach failed: \(error)")
+            return nil
+        }
+    }
 }
 
 // MARK: - Request — matches README API contract
@@ -69,6 +97,24 @@ private struct AnalyzeRequest: Encodable, Sendable {
     struct Rect: Encodable, Sendable { let x, y, w, h: CGFloat }
 }
 
+private struct CoachRequest: Encodable, Sendable {
+    let regionId: String
+    let stallSeconds: Double
+    let oscillationCount: Int
+    let anchor: AnalyzeRequest.XY
+    let userText: String
+    let previousCoachLine: String?
+
+    enum CodingKeys: String, CodingKey {
+        case regionId = "region_id"
+        case stallSeconds = "stall_seconds"
+        case oscillationCount = "oscillation_count"
+        case anchor
+        case userText = "user_text"
+        case previousCoachLine = "previous_coach_line"
+    }
+}
+
 // MARK: - Response — matches README API contract
 
 struct AnalyzeResponse: Decodable, Sendable {
@@ -86,5 +132,16 @@ struct AnalyzeResponse: Decodable, Sendable {
     struct Target: Decodable, Sendable {
         let regionId: String
         enum CodingKeys: String, CodingKey { case regionId = "region_id" }
+    }
+}
+
+struct CoachResponse: Decodable, Sendable {
+    let summary: String
+    let question: String
+    let nextAction: String
+
+    enum CodingKeys: String, CodingKey {
+        case summary, question
+        case nextAction = "next_action"
     }
 }

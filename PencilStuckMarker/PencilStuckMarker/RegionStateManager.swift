@@ -39,6 +39,12 @@ final class RegionStateManager: ObservableObject {
         state.bubbleExpiresAt = nil
         state.isBubbleExpanded = false
         state.interventionLevel = 0
+        state.isCoachPanelVisible = false
+        state.coachOffset = .zero
+        state.coachInput = ""
+        state.coachLine = nil
+        state.coachMessages = []
+        state.isCoachLoading = false
         states[regionId] = state
     }
 
@@ -49,13 +55,21 @@ final class RegionStateManager: ObservableObject {
             if let last = states[regionId]?.lastStrokeAt {
                 states[regionId]?.elapsedSeconds = Int(now.timeIntervalSince(last))
             }
-            if let expiresAt = states[regionId]?.bubbleExpiresAt, now >= expiresAt {
+            if let expiresAt = states[regionId]?.bubbleExpiresAt,
+               now >= expiresAt,
+               states[regionId]?.isCoachPanelVisible != true {
                 states[regionId]?.interventionMessage = nil
                 states[regionId]?.interventionStyle = nil
                 states[regionId]?.interventionAnchor = nil
                 states[regionId]?.bubbleExpiresAt = nil
                 states[regionId]?.isBubbleExpanded = false
                 states[regionId]?.interventionLevel = 0
+                states[regionId]?.isCoachPanelVisible = false
+                states[regionId]?.coachOffset = .zero
+                states[regionId]?.coachInput = ""
+                states[regionId]?.coachLine = nil
+                states[regionId]?.coachMessages = []
+                states[regionId]?.isCoachLoading = false
             }
             checkAndTrigger(regionId: regionId, now: now)
         }
@@ -99,6 +113,9 @@ final class RegionStateManager: ObservableObject {
                 self.states[regionId]?.isBubbleExpanded = false
                 self.states[regionId]?.interventionLevel = 1
                 self.states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(response.cooldownSeconds))
+                self.states[regionId]?.coachOffset = .zero
+                self.states[regionId]?.coachLine = nil
+                self.states[regionId]?.coachMessages = []
             }
         }
     }
@@ -109,6 +126,77 @@ final class RegionStateManager: ObservableObject {
         guard states[regionId]?.interventionMessage != nil else { return }
         states[regionId]?.isBubbleExpanded.toggle()
         states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
+    }
+
+    func openCoachPanel(regionId: String) {
+        for key in states.keys {
+            states[key]?.isCoachPanelVisible = (key == regionId)
+        }
+        states[regionId]?.isBubbleExpanded = true
+        states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(180)
+        if states[regionId]?.coachLine == nil {
+            let starter = "Try reading it out loud once."
+            states[regionId]?.coachLine = starter
+            states[regionId]?.coachMessages = [
+                CoachMessage(speaker: .coach, text: starter)
+            ]
+        }
+    }
+
+    func toggleCoachPanel(regionId: String) {
+        if states[regionId]?.isCoachPanelVisible == true {
+            closeCoachPanel(regionId: regionId)
+        } else {
+            openCoachPanel(regionId: regionId)
+        }
+    }
+
+    func closeCoachPanel(regionId: String) {
+        states[regionId]?.isCoachPanelVisible = false
+        states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
+    }
+
+    func moveCoachPanel(regionId: String, delta: CGSize) {
+        let current = states[regionId]?.coachOffset ?? .zero
+        states[regionId]?.coachOffset = CGSize(
+            width: current.width + delta.width,
+            height: current.height + delta.height
+        )
+    }
+
+    func updateCoachInput(regionId: String, text: String) {
+        states[regionId]?.coachInput = text
+    }
+
+    func sendCoachMessage(regionId: String) {
+        guard var state = states[regionId], !state.isCoachLoading else { return }
+        let trimmed = state.coachInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        state.isCoachLoading = true
+        states[regionId] = state
+        Task {
+            let response = await InterventionService.shared.coach(regionId: regionId, state: state, userText: trimmed)
+            await MainActor.run {
+                self.states[regionId]?.isCoachLoading = false
+                self.states[regionId]?.coachInput = ""
+                self.states[regionId]?.coachMessages.append(
+                    CoachMessage(speaker: .user, text: trimmed)
+                )
+                if let response {
+                    self.states[regionId]?.coachLine = response.nextAction
+                    self.states[regionId]?.coachMessages.append(
+                        CoachMessage(speaker: .coach, text: response.nextAction)
+                    )
+                } else {
+                    let fallback = "Try saying the goal in your own words."
+                    self.states[regionId]?.coachLine = fallback
+                    self.states[regionId]?.coachMessages.append(
+                        CoachMessage(speaker: .coach, text: fallback)
+                    )
+                }
+                self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(180)
+            }
+        }
     }
 
     func requestMoreHint(regionId: String) {
@@ -126,6 +214,12 @@ final class RegionStateManager: ObservableObject {
         states[regionId]?.bubbleExpiresAt = nil
         states[regionId]?.isBubbleExpanded = false
         states[regionId]?.interventionLevel = 0
+        states[regionId]?.isCoachPanelVisible = false
+        states[regionId]?.coachOffset = .zero
+        states[regionId]?.coachInput = ""
+        states[regionId]?.coachLine = nil
+        states[regionId]?.coachMessages = []
+        states[regionId]?.isCoachLoading = false
         states[regionId]?.cooldownUntil = Date().addingTimeInterval(30)
     }
 }

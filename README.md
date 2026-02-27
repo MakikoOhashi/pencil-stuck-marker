@@ -181,6 +181,16 @@ Why this placement:
 }
 ```
 
+### `POST /coach` — short coaching response (JSON-only)
+
+```json
+{
+  "summary": "You paused for a bit here.",
+  "question": "Try one tiny step now?",
+  "next_action": "Circle one clue and restate the goal."
+}
+```
+
 | field | type | description |
 |---|---|---|
 | `intervene` | bool | 介入するか否か |
