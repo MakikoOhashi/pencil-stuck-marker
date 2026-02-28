@@ -11,6 +11,7 @@ import Combine
 final class RegionStateManager: ObservableObject {
 
     @Published private(set) var states: [String: RegionState]
+    private let pendingMessage = "Looks like you paused here."
     private let messageTemplates = [
         "Looks like you paused here a bit.",
         "You might be rewriting and erasing repeatedly.",
@@ -33,6 +34,7 @@ final class RegionStateManager: ObservableObject {
         state.lastStrokePoint = strokeEndPoint
         state.elapsedSeconds = 0
         state.isInterventionPending = false   // reset on new activity
+        state.isInterventionConfirmed = false
         state.interventionMessage = nil
         state.interventionStyle = nil
         state.interventionAnchor = nil
@@ -61,6 +63,8 @@ final class RegionStateManager: ObservableObject {
                 states[regionId]?.interventionMessage = nil
                 states[regionId]?.interventionStyle = nil
                 states[regionId]?.interventionAnchor = nil
+                states[regionId]?.isInterventionPending = false
+                states[regionId]?.isInterventionConfirmed = false
                 states[regionId]?.bubbleExpiresAt = nil
                 states[regionId]?.isBubbleExpanded = false
                 states[regionId]?.interventionLevel = 0
@@ -90,6 +94,11 @@ final class RegionStateManager: ObservableObject {
               !state.isInterventionPending else { return }
         if let cooldownUntil = state.cooldownUntil, now < cooldownUntil { return }
         states[regionId]?.isInterventionPending = true
+        states[regionId]?.isInterventionConfirmed = false
+        states[regionId]?.interventionMessage = pendingMessage
+        states[regionId]?.interventionAnchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
+        states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(6)
+        states[regionId]?.isBubbleExpanded = false
         triggerInterventionCandidate(regionId: regionId, state: state)
     }
 
@@ -104,20 +113,44 @@ final class RegionStateManager: ObservableObject {
             )
             await MainActor.run {
                 self.states[regionId]?.isInterventionPending = false
-                guard let response, response.intervene,
-                      response.target.regionId == regionId else { return }
-                self.states[regionId]?.interventionStyle = response.style
-                self.states[regionId]?.interventionMessage = self.messageTemplates.randomElement() ?? response.message
-                self.states[regionId]?.interventionAnchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
-                self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
-                self.states[regionId]?.isBubbleExpanded = false
-                self.states[regionId]?.interventionLevel = 1
-                self.states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(response.cooldownSeconds))
-                self.states[regionId]?.coachOffset = .zero
-                self.states[regionId]?.coachLine = nil
-                self.states[regionId]?.coachMessages = []
+                guard let response,
+                      response.target.regionId == regionId else {
+                    self.clearPendingIntervention(regionId: regionId, cooldownSeconds: 10)
+                    return
+                }
+                if response.intervene {
+                    self.states[regionId]?.isInterventionConfirmed = true
+                    self.states[regionId]?.interventionStyle = response.style
+                    self.states[regionId]?.interventionMessage = self.messageTemplates.randomElement() ?? response.message
+                    self.states[regionId]?.interventionAnchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
+                    self.states[regionId]?.bubbleExpiresAt = Date().addingTimeInterval(12)
+                    self.states[regionId]?.isBubbleExpanded = false
+                    self.states[regionId]?.interventionLevel = 1
+                    self.states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(response.cooldownSeconds))
+                    self.states[regionId]?.coachOffset = .zero
+                    self.states[regionId]?.coachLine = nil
+                    self.states[regionId]?.coachMessages = []
+                } else {
+                    self.clearPendingIntervention(regionId: regionId, cooldownSeconds: response.cooldownSeconds)
+                }
             }
         }
+    }
+
+    private func clearPendingIntervention(regionId: String, cooldownSeconds: Int) {
+        states[regionId]?.isInterventionConfirmed = false
+        states[regionId]?.interventionMessage = nil
+        states[regionId]?.interventionStyle = nil
+        states[regionId]?.interventionAnchor = nil
+        states[regionId]?.bubbleExpiresAt = nil
+        states[regionId]?.isBubbleExpanded = false
+        states[regionId]?.interventionLevel = 0
+        states[regionId]?.isCoachPanelVisible = false
+        states[regionId]?.coachInput = ""
+        states[regionId]?.coachLine = nil
+        states[regionId]?.coachMessages = []
+        states[regionId]?.isCoachLoading = false
+        states[regionId]?.cooldownUntil = Date().addingTimeInterval(TimeInterval(cooldownSeconds))
     }
 
     // MARK: - Bubble interactions
@@ -211,6 +244,8 @@ final class RegionStateManager: ObservableObject {
         states[regionId]?.interventionMessage = nil
         states[regionId]?.interventionStyle = nil
         states[regionId]?.interventionAnchor = nil
+        states[regionId]?.isInterventionPending = false
+        states[regionId]?.isInterventionConfirmed = false
         states[regionId]?.bubbleExpiresAt = nil
         states[regionId]?.isBubbleExpanded = false
         states[regionId]?.interventionLevel = 0
