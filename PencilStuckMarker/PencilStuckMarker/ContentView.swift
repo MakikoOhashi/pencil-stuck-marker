@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var drawing = PKDrawing()
     @State private var showVoicePlannedAlert = false
     @State private var coachDragTranslation: CGSize = .zero
-    @State private var isDraggingCoachPanel = false
+    @FocusState private var isCoachInputFocused: Bool
     private let worksheetURL = Bundle.main.url(forResource: "cube_worksheet", withExtension: "pdf")
     @StateObject private var regionManager = RegionStateManager(regions: [
         (id: "ALL", rect: CGRect(x: -10_000, y: -10_000, width: 20_000, height: 20_000)),
@@ -22,10 +22,14 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
+                let isInterventionUIActive = regionManager.states.values.contains {
+                    $0.isCoachPanelVisible || $0.isBubbleExpanded || $0.isInterventionPending
+                }
+
                 PDFBackgroundView(url: worksheetURL)
                     .ignoresSafeArea()
 
-                CanvasView(drawing: $drawing) { strokeBounds, strokeEndPoint in
+                CanvasView(drawing: $drawing, allowsFingerDrawing: !isInterventionUIActive) { strokeBounds, strokeEndPoint in
                     for regionId in regionManager.states.keys {
                         regionManager.updateRegionState(
                             regionId: regionId,
@@ -57,41 +61,45 @@ struct ContentView: View {
                             .transition(.opacity)
                     }
 
-                    if state.isCoachPanelVisible {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .ignoresSafeArea()
-                            .zIndex(0)
-                            .onTapGesture {
-                                guard !isDraggingCoachPanel else { return }
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    regionManager.closeCoachPanel(regionId: state.regionId)
-                                }
-                                coachDragTranslation = .zero
-                            }
-                    }
-
                     if let message = state.interventionMessage {
                         VStack(alignment: .leading, spacing: 8) {
                             if !state.isCoachPanelVisible {
-                                Button {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("💭 \(message)")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text("Need a hint?")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
                                     withAnimation(.spring(duration: 0.25)) {
                                         regionManager.toggleBubble(regionId: state.regionId)
                                     }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("💭 \(message)")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                        Text("Need a hint?")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
 
                             if state.isCoachPanelVisible {
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            regionManager.closeCoachPanel(regionId: state.regionId)
+                                        }
+                                        isCoachInputFocused = false
+                                        coachDragTranslation = .zero
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(.secondary)
+                                            .padding(6)
+                                            .background(Color.white.opacity(0.75))
+                                            .clipShape(Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
                                 ScrollView {
                                     VStack(alignment: .leading, spacing: 8) {
                                         ForEach(state.coachMessages) { coachMessage in
@@ -116,6 +124,7 @@ struct ContentView: View {
                                         get: { state.coachInput },
                                         set: { regionManager.updateCoachInput(regionId: state.regionId, text: $0) }
                                     ))
+                                    .focused($isCoachInputFocused)
                                     .font(.subheadline)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8)
@@ -123,6 +132,7 @@ struct ContentView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
                                     Button(state.isCoachLoading ? "..." : "Send") {
+                                        isCoachInputFocused = false
                                         regionManager.sendCoachMessage(regionId: state.regionId)
                                     }
                                     .disabled(state.isCoachLoading || state.coachInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -135,7 +145,7 @@ struct ContentView: View {
                                 }
                             } else if state.isBubbleExpanded {
                                 HStack(spacing: 8) {
-                                    Button("Talk with coach") {
+                                    Button(state.isInterventionConfirmed ? "Talk with coach" : "Talk with coach") {
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             regionManager.toggleCoachPanel(regionId: state.regionId)
                                         }
@@ -158,14 +168,20 @@ struct ContentView: View {
                                     .clipShape(Capsule())
                                 }
 
-                                Button {
-                                    showVoicePlannedAlert = true
-                                } label: {
-                                    Label("Voice mode (planned)", systemImage: "mic.fill")
+                                if state.isInterventionConfirmed {
+                                    Button {
+                                        showVoicePlannedAlert = true
+                                    } label: {
+                                        Label("Voice mode (planned)", systemImage: "mic.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Text("Checking... opening coach when ready")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, 10)
@@ -178,24 +194,17 @@ struct ContentView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                         .zIndex(1)
-                        .onTapGesture {
-                            // Consume taps inside the panel so outside-tap close doesn't fire.
-                        }
                         .position(x: boxX, y: boxY)
-                        .gesture(
+                        .simultaneousGesture(
                             DragGesture(minimumDistance: 3)
                                 .onChanged { value in
                                     guard state.isCoachPanelVisible else { return }
-                                    isDraggingCoachPanel = true
                                     coachDragTranslation = value.translation
                                 }
                                 .onEnded { value in
                                     guard state.isCoachPanelVisible else { return }
                                     regionManager.moveCoachPanel(regionId: state.regionId, delta: value.translation)
                                     coachDragTranslation = .zero
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                        isDraggingCoachPanel = false
-                                    }
                                 }
                         )
                         .animation(.easeInOut(duration: 0.22), value: state.isCoachPanelVisible)

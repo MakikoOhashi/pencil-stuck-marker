@@ -8,6 +8,7 @@ import PencilKit
 
 struct CanvasView: UIViewRepresentable {
     @Binding var drawing: PKDrawing
+    var allowsFingerDrawing: Bool
     var onStrokeAdded: (CGRect, CGPoint) -> Void
 
     func makeUIView(context: Context) -> PKCanvasView {
@@ -15,7 +16,7 @@ struct CanvasView: UIViewRepresentable {
         canvas.drawing = drawing
         canvas.delegate = context.coordinator
         canvas.tool = PKInkingTool(.pen, color: .black, width: 3)
-        canvas.drawingPolicy = .anyInput
+        canvas.drawingPolicy = allowsFingerDrawing ? .anyInput : .pencilOnly
         canvas.backgroundColor = .clear
         return canvas
     }
@@ -23,6 +24,10 @@ struct CanvasView: UIViewRepresentable {
     func updateUIView(_ uiView: PKCanvasView, context: Context) {
         // State 更新ごとに最新クロージャを Coordinator に渡す
         context.coordinator.onStrokeAdded = onStrokeAdded
+        let policy: PKCanvasViewDrawingPolicy = allowsFingerDrawing ? .anyInput : .pencilOnly
+        if uiView.drawingPolicy != policy {
+            uiView.drawingPolicy = policy
+        }
     }
 
     func makeCoordinator() -> Coordinator {

@@ -5,6 +5,8 @@ import base64
 import inspect
 import json
 import os
+import time
+import asyncio
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -12,6 +14,8 @@ from openai import AsyncOpenAI
 
 
 app = FastAPI(title="Pencil Stuck Marker - Analyze API")
+_STICKY_TRUE_UNTIL_BY_REGION: dict[str, float] = {}
+_STICKY_TRUE_SECONDS = 60.0
 
 
 class XY(BaseModel):
@@ -27,6 +31,7 @@ class Rect(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    request_id: str
     region_id: str
     stall_seconds: float = Field(ge=0)
     oscillation_count: int = Field(ge=0)
@@ -40,6 +45,7 @@ class Target(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
+    request_id: str
     intervene: bool
     style: str
     message: str
@@ -170,30 +176,44 @@ def _normalize_next_action(text: str) -> str:
 
 def _coach_rule_from_user_text(req: CoachRequest) -> Optional[CoachResponse]:
     text = req.user_text.lower()
+    first_turn = not (req.previous_coach_line and req.previous_coach_line.strip())
+
+    if first_turn:
+        return CoachResponse(
+            summary="",
+            question="",
+            next_action="Try reading it out loud once.",
+        )
+
+    ack_tokens = ("ok", "okay", "got it", "i see", "yes", "yep")
+    if any(token in text for token in ack_tokens):
+        return CoachResponse(
+            summary="",
+            question="",
+            next_action="Great. Does it make sense now?",
+        )
+
     solved_tokens = ("figured out", "i got it", "got it", "solved", "understand now")
     if any(token in text for token in solved_tokens):
         return CoachResponse(
-            summary="Nice, you got it.",
-            question="Want a quick self-check?",
-            next_action="Say in one sentence why it works.",
+            summary="",
+            question="",
+            next_action="Nice. Can you explain why in one line?",
         )
     if "don't know" in text or "stuck" in text:
         return CoachResponse(
-            summary="Makes sense to feel stuck.",
-            question="Start from givens first?",
-            next_action="Underline one given condition.",
+            summary="",
+            question="",
+            next_action="Let's start small. Underline one given.",
         )
     return None
 
 
 def _coach_fallback(req: CoachRequest) -> CoachResponse:
-    summary = "You paused for a bit here."
-    if req.oscillation_count >= 3:
-        summary = "You may be rewriting repeatedly."
     return CoachResponse(
-        summary=summary,
-        question="Try one tiny step now?",
-        next_action="Read one line aloud and circle one clue.",
+        summary="",
+        question="",
+        next_action="Try one small step. Circle one clue.",
     )
 
 
@@ -206,13 +226,14 @@ async def _coach_with_llm(req: CoachRequest) -> Optional[CoachResponse]:
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     system = (
-        "You are a study companion. You cannot see worksheet content and must not pretend you can. "
-        "Never provide answers, solutions, or problem explanations. "
+        "You are a gentle study companion. You cannot see worksheet content and must not pretend you can. "
+        "Do not provide answers or solution steps. Keep the learner focused on the current problem. "
         "Return only JSON with keys summary, question, next_action. "
-        "Each value must be one short sentence (<=45 chars). "
-        "question must be yes/no or two-choice style. "
-        "next_action must be one concrete page action (read aloud, circle, underline, restate). "
-        "Never mention app navigation (e.g., click next / continue)."
+        "Use very short text (<=45 chars each). "
+        "If previous_coach_line is empty, next_action should be one concrete micro-step on the page. "
+        "If previous_coach_line exists, respond naturally to learner_text with one short coaching line in next_action "
+        "(acknowledge + one check question OR one tiny next step). "
+        "Avoid repetitive wording. Never mention app navigation."
     )
     user = (
         f"region={req.region_id}, stall_seconds={req.stall_seconds}, oscillation_count={req.oscillation_count}, "
@@ -234,10 +255,10 @@ async def _coach_with_llm(req: CoachRequest) -> Optional[CoachResponse]:
     except Exception:
         return None
 
-    summary = _short_line(str(raw.get("summary", "You paused for a bit here.")))
-    question = _short_line(str(raw.get("question", "Try one tiny step now?")))
+    summary = _short_line(str(raw.get("summary", "")))
+    question = _short_line(str(raw.get("question", "")))
     next_action = _normalize_next_action(
-        str(raw.get("next_action", "Circle one clue and restate the goal."))
+        str(raw.get("next_action", "Try one small step. Circle one clue."))
     )
     return CoachResponse(summary=summary, question=question, next_action=next_action)
 
@@ -258,7 +279,11 @@ async def _verify_intervention(req: AnalyzeRequest) -> bool:
 
     # Vision Agents SDK path:
     # If configured, use VA decision as final verifier.
-    va_decision = await _verify_with_vision_agents(req)
+    try:
+        va_decision = await asyncio.wait_for(_verify_with_vision_agents(req), timeout=1.8)
+    except asyncio.TimeoutError:
+        va_decision = None
+        print(f"[analyze] verifier=vision_agents timeout region={req.region_id}")
     if va_decision is not None:
         print(f"[analyze] verifier=vision_agents decision={va_decision} region={req.region_id}")
         return va_decision
@@ -269,15 +294,27 @@ async def _verify_intervention(req: AnalyzeRequest) -> bool:
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
-    intervene = await _verify_intervention(req)
+    raw_intervene = await _verify_intervention(req)
+    now = time.monotonic()
+    sticky_until = _STICKY_TRUE_UNTIL_BY_REGION.get(req.region_id, 0.0)
+    if (not raw_intervene) and now < sticky_until:
+        intervene = True
+        print(f"[analyze] sticky=true region={req.region_id}")
+    else:
+        intervene = raw_intervene
+
+    if intervene:
+        _STICKY_TRUE_UNTIL_BY_REGION[req.region_id] = now + _STICKY_TRUE_SECONDS
+
     if intervene:
         message = "Looks like you paused here a bit."
         cooldown = 45
     else:
         message = "Looks fine for now."
-        cooldown = 15
+        cooldown = 45
 
     return AnalyzeResponse(
+        request_id=req.request_id,
         intervene=intervene,
         style="highlight",
         message=message,

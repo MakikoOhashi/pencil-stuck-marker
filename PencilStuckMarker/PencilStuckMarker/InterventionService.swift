@@ -13,12 +13,13 @@ actor InterventionService {
 
     static let shared = InterventionService()
 
-    private let endpoint = URL(string: "http://localhost:8000/analyze")!
-    private let coachEndpoint = URL(string: "http://localhost:8000/coach")!
+    private let endpoint = URL(string: "http://127.0.0.1:8000/analyze")!
+    private let coachEndpoint = URL(string: "http://127.0.0.1:8000/coach")!
 
-    func analyze(regionId: String, state: RegionState, framePngBase64: String) async -> AnalyzeResponse? {
+    func analyze(regionId: String, requestId: UUID, state: RegionState, framePngBase64: String) async -> AnalyzeResponse? {
         let anchor = state.lastStrokePoint ?? CGPoint(x: state.rect.midX, y: state.rect.midY)
         let payload = AnalyzeRequest(
+            requestId: requestId.uuidString,
             regionId: regionId,
             stallSeconds: Double(state.elapsedSeconds),
             oscillationCount: state.oscillationCount,
@@ -32,6 +33,7 @@ actor InterventionService {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 8.0
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
@@ -61,6 +63,7 @@ actor InterventionService {
 
         var request = URLRequest(url: coachEndpoint)
         request.httpMethod = "POST"
+        request.timeoutInterval = 6.0
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
@@ -76,7 +79,8 @@ actor InterventionService {
 
 // MARK: - Request — matches README API contract
 
-private struct AnalyzeRequest: Encodable, Sendable {
+nonisolated private struct AnalyzeRequest: Encodable, Sendable {
+    let requestId: String
     let regionId: String
     let stallSeconds: Double
     let oscillationCount: Int
@@ -85,6 +89,7 @@ private struct AnalyzeRequest: Encodable, Sendable {
     let framePngBase64: String
 
     enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
         case regionId = "region_id"
         case stallSeconds = "stall_seconds"
         case oscillationCount = "oscillation_count"
@@ -93,11 +98,11 @@ private struct AnalyzeRequest: Encodable, Sendable {
         case framePngBase64 = "frame_png_base64"
     }
 
-    struct XY: Encodable, Sendable { let x, y: CGFloat }
-    struct Rect: Encodable, Sendable { let x, y, w, h: CGFloat }
+    nonisolated struct XY: Encodable, Sendable { let x, y: CGFloat }
+    nonisolated struct Rect: Encodable, Sendable { let x, y, w, h: CGFloat }
 }
 
-private struct CoachRequest: Encodable, Sendable {
+nonisolated private struct CoachRequest: Encodable, Sendable {
     let regionId: String
     let stallSeconds: Double
     let oscillationCount: Int
@@ -117,7 +122,8 @@ private struct CoachRequest: Encodable, Sendable {
 
 // MARK: - Response — matches README API contract
 
-struct AnalyzeResponse: Decodable, Sendable {
+nonisolated struct AnalyzeResponse: Decodable, Sendable {
+    let requestId: String
     let intervene: Bool
     let style: String
     let message: String
@@ -125,17 +131,18 @@ struct AnalyzeResponse: Decodable, Sendable {
     let cooldownSeconds: Int
 
     enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
         case intervene, style, message, target
         case cooldownSeconds = "cooldown_seconds"
     }
 
-    struct Target: Decodable, Sendable {
+    nonisolated struct Target: Decodable, Sendable {
         let regionId: String
         enum CodingKeys: String, CodingKey { case regionId = "region_id" }
     }
 }
 
-struct CoachResponse: Decodable, Sendable {
+nonisolated struct CoachResponse: Decodable, Sendable {
     let summary: String
     let question: String
     let nextAction: String

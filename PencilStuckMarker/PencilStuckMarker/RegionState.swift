@@ -6,6 +6,13 @@
 import CoreGraphics
 import Foundation
 
+enum InterventionPhase {
+    case idle
+    case pending
+    case bubbleExpanded
+    case coachOpen
+}
+
 enum CoachSpeaker: Equatable {
     case user
     case coach
@@ -34,6 +41,9 @@ struct RegionState {
     var cooldownUntil: Date? = nil
     var isBubbleExpanded: Bool = false
     var interventionLevel: Int = 0
+    var shouldAutoOpenCoach: Bool = false
+    var phase: InterventionPhase = .idle
+    var activeRequestId: UUID? = nil
     var isCoachPanelVisible: Bool = false
     var coachOffset: CGSize = .zero
     var coachInput: String = ""
