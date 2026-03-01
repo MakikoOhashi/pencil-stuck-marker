@@ -1,5 +1,7 @@
 # Pencil Stuck Marker
 
+🎥 Demo video: https://youtu.be/YvEoh3dscvs
+
 An iPad learning companion prototype that detects writing stalls and offers a gentle, spatial nudge without solving problems.
 
 ## Current Status (2026-03-01)
