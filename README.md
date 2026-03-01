@@ -119,6 +119,19 @@ Response
 - Python 3.11 recommended
 - macOS with iOS Simulator
 
+## How to Run (Prototype)
+1. Clone this repository.
+2. Open `PencilStuckMarker/PencilStuckMarker.xcodeproj` in Xcode.
+3. Run Python service:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r python_service/requirements.txt
+set -a; source .env; set +a
+uvicorn python_service.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir python_service
+```
+4. Build and run on iPad Simulator or device.
+
 ## Setup
 
 ### 1) Python backend
@@ -163,6 +176,9 @@ open PencilStuckMarker/PencilStuckMarker.xcodeproj
 4. Confirm bubble appears near anchor.
 5. Tap bubble -> `Talk with coach`.
 6. Send short message (e.g., `I understood.`) and confirm short coaching response.
+
+## Expected Limitations During Demo
+Note: The current prototype may not handle edge-case inputs consistently.
 
 ## Troubleshooting
 
